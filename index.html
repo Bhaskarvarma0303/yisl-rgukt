@@ -40,14 +40,40 @@
         cOsc.stop(audioCtx.currentTime + 0.5);
       }
 
-      // Handle Input (Desktop and VR)
+      // VR Controller Handling
+      AFRAME.registerComponent('vr-drive-controls', {
+        schema: { hand: { type: 'string', default: 'left' } },
+        init: function () {
+          this.el.addEventListener('thumbstickmoved', (e) => {
+            if (window.startAudio) window.startAudio();
+            if (this.data.hand === 'left') {
+              window.gameControls.steer = (Math.abs(e.detail.x) > 0.1) ? e.detail.x : 0;
+            } else {
+              window.gameControls.gas = (Math.abs(e.detail.y) > 0.1) ? -e.detail.y : 0;
+            }
+          });
+          
+          this.el.addEventListener('axismove', (e) => {
+            if (window.startAudio) window.startAudio();
+            let x = e.detail.axis[0] || e.detail.axis[2] || 0;
+            let y = e.detail.axis[1] || e.detail.axis[3] || 0;
+            if (this.data.hand === 'left') {
+              if (Math.abs(x) > 0.1) window.gameControls.steer = x;
+            } else {
+              if (Math.abs(y) > 0.1) window.gameControls.gas = -y;
+            }
+          });
+        }
+      });
+
+      // Handle Input (Desktop and VR fallback)
       AFRAME.registerComponent('car-controls', {
         init: function () {
           this.keys = { w: false, a: false, s: false, d: false };
-          const startAudio = () => { initAudio(); if(audioCtx.state === 'suspended') audioCtx.resume(); };
+          window.startAudio = () => { initAudio(); if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); };
 
           window.addEventListener('keydown', (e) => {
-            startAudio();
+            window.startAudio();
             if (e.key === 'w' || e.key === 'ArrowUp') this.keys.w = true;
             if (e.key === 'a' || e.key === 'ArrowLeft') this.keys.a = true;
             if (e.key === 's' || e.key === 'ArrowDown') this.keys.s = true;
@@ -59,14 +85,6 @@
             if (e.key === 'a' || e.key === 'ArrowLeft') this.keys.a = false;
             if (e.key === 's' || e.key === 'ArrowDown') this.keys.s = false;
             if (e.key === 'd' || e.key === 'ArrowRight') this.keys.d = false;
-          });
-
-          this.el.addEventListener('axismove', (e) => {
-            startAudio();
-            let x = e.detail.axis[0] || e.detail.axis[2] || 0;
-            let y = e.detail.axis[1] || e.detail.axis[3] || 0;
-            window.gameControls.steer = (Math.abs(x) > 0.1) ? x : 0;
-            window.gameControls.gas = (Math.abs(y) > 0.1) ? -y : 0; 
           });
         },
         tick: function() {
@@ -103,45 +121,10 @@
             roadLines.appendChild(line);
           }
 
-          let obstacleContainer = document.getElementById('obstacles');
-          for (let i = 0; i < 5; i++) {
-            let obs = document.createElement('a-box');
-            obs.setAttribute('width', '1.5');
-            obs.setAttribute('height', '1');
-            obs.setAttribute('depth', '1.5');
-            obs.setAttribute('color', '#EF4444');
-            let zPos = -30 - Math.random() * 30 - i * 15;
-            let xPos = (Math.random() - 0.5) * 8;
-            obs.setAttribute('position', `${xPos} 0.5 ${zPos}`);
-            obs.classList.add('obstacle');
-            obstacleContainer.appendChild(obs);
-          }
+          // Obstacles removed from setup
         },
         hitObstacle: function () {
-          this.speed = 0;
-          this.isGameOver = true;
-          playCrashSound();
-          
-          document.getElementById('status-display').setAttribute('value', 'CRASH! Game Over');
-          document.getElementById('status-display').setAttribute('color', '#EF4444');
-          document.getElementById('status-display').setAttribute('visible', 'true');
-
-          let cockpit = document.getElementById('cockpit');
-          cockpit.setAttribute('animation', 'property: position; to: 0.1 0.1 0; dur: 50; dir: alternate; loop: 5');
-
-          setTimeout(() => {
-             this.speed = 0;
-             this.score = 0;
-             window.carX = 0;
-             this.isGameOver = false;
-             cockpit.removeAttribute('animation');
-             document.getElementById('status-display').setAttribute('visible', 'false');
-             
-             let obs = document.querySelectorAll('.obstacle');
-             obs.forEach((o, i) => {
-                o.object3D.position.z = -30 - Math.random() * 30 - i * 15;
-             });
-          }, 3000);
+          // Obstacle logic removed
         },
         tick: function(time, timeDelta) {
           if (timeDelta > 100) timeDelta = 100;
@@ -187,21 +170,7 @@
             l.object3D.position.z = z;
           });
 
-          // Move obstacles
-          document.querySelectorAll('.obstacle').forEach(o => {
-            var z = o.object3D.position.z + speedZ;
-            if (z > 2) {
-              z -= (40 + Math.random() * 40);
-              o.object3D.position.x = (Math.random() - 0.5) * 8;
-            }
-            o.object3D.position.z = z;
-
-            var dx = o.object3D.position.x - window.carX;
-            var dz = z - 0;
-            if ((dx*dx + dz*dz) < 2.0 && z > -2 && z < 2) {
-               this.hitObstacle();
-            }
-          });
+          // Obstacle move logic removed
 
           this.score += this.speed * dt;
           document.getElementById('speed-display').setAttribute('value', Math.floor(this.speed * 2) + ' km/h');
@@ -213,8 +182,10 @@
   <body>
     <a-scene background="color: #87CEEB" game-manager car-controls>
       
-      <a-entity laser-controls="hand: left" raycaster="showLine: false"></a-entity>
-      <a-entity laser-controls="hand: right" raycaster="showLine: false"></a-entity>
+      <!-- Left mapped to turning -->
+      <a-entity laser-controls="hand: left" oculus-touch-controls="hand: left" vr-drive-controls="hand: left" raycaster="showLine: false"></a-entity>
+      <!-- Right mapped to gas -->
+      <a-entity laser-controls="hand: right" oculus-touch-controls="hand: right" vr-drive-controls="hand: right" raycaster="showLine: false"></a-entity>
       
       <a-light type="directional" position="-1 2 1" intensity="0.8"></a-light>
       <a-light type="ambient" intensity="0.4"></a-light>
