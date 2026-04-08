@@ -1,229 +1,572 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>VR First-Person Racing</title>
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>VR Bike Racing - Immersive Track Experience</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 10px 20px;
+            border-radius: 8px;
+            pointer-events: none;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+        #score {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: gold;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 24px;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 10;
+            backdrop-filter: blur(4px);
+            border-left: 3px solid gold;
+        }
+        #controls-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 12px;
+            border-radius: 12px;
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 14px;
+            z-index: 10;
+            pointer-events: none;
+            font-weight: bold;
+            text-shadow: 1px 1px 0 black;
+            border-top: 1px solid rgba(255,255,255,0.3);
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+        }
+        .controls-key {
+            background: rgba(0,0,0,0.7);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 16px;
+            border: 1px solid cyan;
+            color: cyan;
+        }
+        @media (max-width: 600px) {
+            #controls-panel { font-size: 10px; padding: 8px; }
+            .controls-key { font-size: 12px; padding: 3px 8px; }
+            #score { font-size: 18px; top: 12px; right: 12px; }
+        }
+        a {
+            color: cyan;
+            text-decoration: none;
+        }
+        .vr-badge {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            pointer-events: none;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        🏍️ VR BIKE RACING | <span style="color: #ffaa44;">NEO TRACK</span>
+    </div>
+    <div id="score">
+        SCORE: <span id="scoreValue">0</span>
+    </div>
+    <div id="controls-panel">
+        <span>🎮 CONTROLS:</span>
+        <span class="controls-key">← →</span> <span>Steer / Lean</span>
+        <span class="controls-key">↑ ↓</span> <span>Speed Up / Slow Down</span>
+        <span class="controls-key">R</span> <span>Restart Race</span>
+        <span>🏁 Drift effect + VR immersive cam</span>
+    </div>
+    <div class="vr-badge">
+        🔮 VR Ready | Drag to look around
+    </div>
 
-    <script>
-      window.gameControls = { gas: 0, steer: 0 };
-      window.carX = 0;
-
-      // Audio Synthesis for Engine Sound and Crash
-      let audioCtx, osc, gainNode;
-      function initAudio() {
-        if (audioCtx) return;
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        osc = audioCtx.createOscillator();
-        gainNode = audioCtx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.value = 40; 
-        gainNode.gain.value = 0; 
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        osc.start();
-      }
-
-      function playCrashSound() {
-        if (!audioCtx) return;
-        let cOsc = audioCtx.createOscillator();
-        let cGain = audioCtx.createGain();
-        cOsc.type = 'sawtooth';
-        cOsc.frequency.setValueAtTime(100, audioCtx.currentTime);
-        cOsc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.5);
-        cGain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-        cGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-        cOsc.connect(cGain);
-        cGain.connect(audioCtx.destination);
-        cOsc.start();
-        cOsc.stop(audioCtx.currentTime + 0.5);
-      }
-
-      // VR Controller Handling
-      AFRAME.registerComponent('vr-drive-controls', {
-        schema: { hand: { type: 'string', default: 'left' } },
-        init: function () {
-          this.el.addEventListener('thumbstickmoved', (e) => {
-            if (window.startAudio) window.startAudio();
-            if (this.data.hand === 'left') {
-              window.gameControls.steer = (Math.abs(e.detail.x) > 0.1) ? e.detail.x : 0;
-            } else {
-              window.gameControls.gas = (Math.abs(e.detail.y) > 0.1) ? -e.detail.y : 0;
+    <!-- Import Three.js core and add-ons -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
             }
-          });
-          
-          this.el.addEventListener('axismove', (e) => {
-            if (window.startAudio) window.startAudio();
-            let x = e.detail.axis[0] || e.detail.axis[2] || 0;
-            let y = e.detail.axis[1] || e.detail.axis[3] || 0;
-            if (this.data.hand === 'left') {
-              if (Math.abs(x) > 0.1) window.gameControls.steer = x;
-            } else {
-              if (Math.abs(y) > 0.1) window.gameControls.gas = -y;
-            }
-          });
         }
-      });
-
-      // Handle Input (Desktop and VR fallback)
-      AFRAME.registerComponent('car-controls', {
-        init: function () {
-          this.keys = { w: false, a: false, s: false, d: false };
-          window.startAudio = () => { initAudio(); if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); };
-
-          window.addEventListener('keydown', (e) => {
-            window.startAudio();
-            if (e.key === 'w' || e.key === 'ArrowUp') this.keys.w = true;
-            if (e.key === 'a' || e.key === 'ArrowLeft') this.keys.a = true;
-            if (e.key === 's' || e.key === 'ArrowDown') this.keys.s = true;
-            if (e.key === 'd' || e.key === 'ArrowRight') this.keys.d = true;
-          });
-
-          window.addEventListener('keyup', (e) => {
-            if (e.key === 'w' || e.key === 'ArrowUp') this.keys.w = false;
-            if (e.key === 'a' || e.key === 'ArrowLeft') this.keys.a = false;
-            if (e.key === 's' || e.key === 'ArrowDown') this.keys.s = false;
-            if (e.key === 'd' || e.key === 'ArrowRight') this.keys.d = false;
-          });
-        },
-        tick: function() {
-          if (this.keys.w) window.gameControls.gas = 1;
-          else if (this.keys.s) window.gameControls.gas = -1;
-          else if (!this.el.sceneEl.is('vr-mode')) window.gameControls.gas = 0; 
-
-          if (this.keys.a) window.gameControls.steer = -1;
-          else if (this.keys.d) window.gameControls.steer = 1;
-          else if (!this.el.sceneEl.is('vr-mode')) window.gameControls.steer = 0;
-        }
-      });
-
-      // Main Game Logic
-      AFRAME.registerComponent('game-manager', {
-        init: function () {
-          this.speed = 0;
-          this.maxSpeed = 50;
-          this.accelRate = 15;
-          this.brakeRate = 20;
-          this.friction = 5;
-          this.score = 0;
-          this.isGameOver = false;
-
-          let roadLines = document.getElementById('road-lines');
-          for (let i = 0; i < 10; i++) {
-            let line = document.createElement('a-plane');
-            line.setAttribute('width', '0.2');
-            line.setAttribute('height', '3');
-            line.setAttribute('color', '#EEEEEE');
-            line.setAttribute('rotation', '-90 0 0');
-            line.setAttribute('position', `0 0.01 ${-i * 6}`);
-            line.classList.add('road-mark');
-            roadLines.appendChild(line);
-          }
-
-          // Obstacles removed from setup
-        },
-        hitObstacle: function () {
-          // Obstacle logic removed
-        },
-        tick: function(time, timeDelta) {
-          if (timeDelta > 100) timeDelta = 100;
-          var dt = timeDelta / 1000;
-          
-          if (this.isGameOver) return;
-          
-          var targetSpeed = this.speed;
-          if (window.gameControls.gas > 0) targetSpeed += this.accelRate * window.gameControls.gas * dt;
-          else if (window.gameControls.gas < 0) targetSpeed -= this.brakeRate * Math.abs(window.gameControls.gas) * dt; 
-          else targetSpeed -= this.friction * dt;
-
-          this.speed = Math.max(0, Math.min(this.maxSpeed, targetSpeed));
-
-          if (this.speed > 5) document.getElementById('tutorial').setAttribute('visible', 'false');
-
-          if (osc && gainNode && audioCtx.state === 'running') {
-            osc.frequency.value = 40 + this.speed * 2.5;
-            gainNode.gain.value = this.speed > 1 ? 0.05 + (this.speed / this.maxSpeed) * 0.1 : 0;
-          }
-
-          var cockpit = document.getElementById('cockpit');
-          var rumbleY = (Math.random() - 0.5) * (this.speed / 1000); 
-
-          var steerAmount = window.gameControls.steer * this.speed * 0.15 * dt;
-          window.carX += steerAmount;
-          window.carX = Math.max(-4, Math.min(4, window.carX));
-
-          var wheel = document.getElementById('steering-wheel');
-          if (wheel) wheel.setAttribute('rotation', `15 0 ${-window.gameControls.steer * 90}`);
-
-          if (cockpit) {
-             cockpit.setAttribute('position', `${window.carX} ${0 + rumbleY} 0`);
-             cockpit.setAttribute('rotation', `0 ${-window.gameControls.steer * 10} ${-window.gameControls.steer * 5}`);
-          }
-
-          var speedZ = this.speed * dt;
-          
-          // Move lines
-          document.querySelectorAll('.road-mark').forEach(l => {
-            var z = l.object3D.position.z + speedZ;
-            if (z > 5) z -= 60;
-            l.object3D.position.z = z;
-          });
-
-          // Obstacle move logic removed
-
-          this.score += this.speed * dt;
-          document.getElementById('speed-display').setAttribute('value', Math.floor(this.speed * 2) + ' km/h');
-          document.getElementById('score-display').setAttribute('value', 'Score: ' + Math.floor(this.score));
-        }
-      });
     </script>
-  </head>
-  <body>
-    <a-scene background="color: #87CEEB" game-manager car-controls>
-      
-      <!-- Left mapped to turning -->
-      <a-entity laser-controls="hand: left" oculus-touch-controls="hand: left" vr-drive-controls="hand: left" raycaster="showLine: false"></a-entity>
-      <!-- Right mapped to gas -->
-      <a-entity laser-controls="hand: right" oculus-touch-controls="hand: right" vr-drive-controls="hand: right" raycaster="showLine: false"></a-entity>
-      
-      <a-light type="directional" position="-1 2 1" intensity="0.8"></a-light>
-      <a-light type="ambient" intensity="0.4"></a-light>
 
-      <a-plane position="0 0 -25" rotation="-90 0 0" width="12" height="100" color="#222222"></a-plane>
-      <a-plane position="-20 0 -25" rotation="-90 0 0" width="28" height="100" color="#3B5E2B"></a-plane>
-      <a-plane position="20 0 -25" rotation="-90 0 0" width="28" height="100" color="#3B5E2B"></a-plane>
-      
-      <a-entity id="road-lines"></a-entity>
-      <a-entity id="obstacles"></a-entity>
-
-      <a-text id="tutorial" value="Use W A S D or Thumbsticks to Drive!" position="0 3 -5" align="center" color="#FFFFFF" scale="1.5 1.5 1.5"></a-text>
-
-      <a-entity id="cockpit" position="0 0 0">
-        <a-camera position="0 1.2 0" wasd-controls-enabled="false" look-controls-enabled="true"></a-camera>
-
-        <a-box position="0 0.7 -0.8" width="1.6" height="0.4" depth="0.4" color="#111111"></a-box>
-        <a-box position="0 0.8 -1.25" width="1.6" height="0.1" depth="0.8" color="#A00000"></a-box>
-
-        <a-cylinder position="0 0.7 -0.6" rotation="15 0 0" radius="0.05" height="0.3" color="#333333"></a-cylinder>
-        <a-torus id="steering-wheel" position="0 0.8 -0.5" rotation="15 0 0" radius="0.25" radius-tubular="0.03" color="#222222"></a-torus>
-
-        <a-cylinder position="-0.75 1.1 -0.8" rotation="30 0 0" radius="0.03" height="0.8" color="#111111"></a-cylinder>
-        <a-cylinder position="0.75 1.1 -0.8" rotation="30 0 0" radius="0.03" height="0.8" color="#111111"></a-cylinder>
-
-        <a-plane position="-0.4 0.75 -0.6" rotation="-15 0 0" width="0.4" height="0.2" color="#000000">
-           <a-text id="speed-display" value="0 km/h" position="0 0 0.01" align="center" color="#00FF00" scale="0.5 0.5 0.5"></a-text>
-        </a-plane>
-
-        <a-plane position="0.4 0.75 -0.6" rotation="-15 0 0" width="0.4" height="0.2" color="#000000">
-           <a-text id="score-display" value="Score: 0" position="0 0 0.01" align="center" color="#FFFFFF" scale="0.5 0.5 0.5"></a-text>
-        </a-plane>
-
-        <a-plane position="0 0.75 -0.6" rotation="-15 0 0" width="0.3" height="0.1" color="#000" visible="false" material="opacity:0">
-           <a-text id="status-display" value="" position="0 0 0.01" align="center" color="#FF0000" scale="0.6 0.6 0.6"></a-text>
-        </a-plane>
-      </a-entity>
-
-    </a-scene>
-  </body>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        
+        // --- setup scene, camera, renderer ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050b1a);
+        scene.fog = new THREE.FogExp2(0x050b1a, 0.008); // atmospheric fog
+        
+        // Camera: perspective for immersive feel (VR-like wide FOV)
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.8, 3.5);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.toneMapping = THREE.ReinhardToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        document.body.appendChild(renderer.domElement);
+        
+        // --- post-processing bloom for neon effects ---
+        const renderScene = new RenderPass(scene, camera);
+        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.3, 0.85);
+        bloomPass.threshold = 0.1;
+        bloomPass.strength = 0.8;
+        bloomPass.radius = 0.5;
+        const effectComposer = new EffectComposer(renderer);
+        effectComposer.addPass(renderScene);
+        effectComposer.addPass(bloomPass);
+        
+        // --- Controls for camera orbiting (VR-like but with ability to look around, also fixed follow mode) ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.autoRotate = false;
+        controls.enableZoom = true;
+        controls.zoomSpeed = 0.8;
+        controls.rotateSpeed = 1.0;
+        controls.target.set(0, 1.2, 0);
+        
+        // --- Lighting ---
+        // Ambient
+        const ambientLight = new THREE.AmbientLight(0x222222);
+        scene.add(ambientLight);
+        // Main directional light (sun)
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        dirLight.receiveShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        scene.add(dirLight);
+        // Fill light from below (track glow)
+        const fillLight = new THREE.PointLight(0x4466ff, 0.5);
+        fillLight.position.set(0, -1, 0);
+        scene.add(fillLight);
+        // Dynamic neon lights (follow bike)
+        const bikeLight = new THREE.PointLight(0xff44aa, 0.8, 20);
+        bikeLight.castShadow = false;
+        scene.add(bikeLight);
+        
+        // --- Track Generation: Curved endless track with checkpoints (visual) ---
+        const trackLength = 400;
+        const trackWidth = 3.5;
+        const curveAmplitude = 2.2;
+        const curveFrequency = 0.025;
+        
+        // Create track segments (using instanced mesh? but simple geometry per section for color variation)
+        const trackGroup = new THREE.Group();
+        const segmentLength = 2.0;
+        const numSegments = Math.ceil(trackLength / segmentLength);
+        
+        // Store track points for boundary collisions & scoring
+        const trackPoints = []; // each: { z, leftX, rightX, centerX }
+        
+        // Materials
+        const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.4, metalness: 0.7 });
+        const neonMat = new THREE.MeshStandardMaterial({ color: 0x00ccff, emissive: 0x0066aa, emissiveIntensity: 0.6 });
+        const neonMatRed = new THREE.MeshStandardMaterial({ color: 0xff3366, emissive: 0xaa1144, emissiveIntensity: 0.5 });
+        
+        for (let i = 0; i <= numSegments; i++) {
+            const zPos = i * segmentLength - 20; // start slightly behind camera
+            // compute curved X position for center of track
+            const t = (zPos + 20) * curveFrequency;
+            const centerX = Math.sin(t) * curveAmplitude + Math.cos(t * 0.7) * 0.8;
+            
+            // create plane geometry for segment
+            const widthVar = trackWidth;
+            const geometry = new THREE.BoxGeometry(widthVar, 0.2, segmentLength);
+            const segmentMesh = new THREE.Mesh(geometry, asphaltMat);
+            segmentMesh.position.set(centerX, -0.2, zPos);
+            segmentMesh.receiveShadow = true;
+            segmentMesh.castShadow = true;
+            trackGroup.add(segmentMesh);
+            
+            // Add neon strips on edges (left and right)
+            const edgeMat = (i % 3 === 0) ? neonMatRed : neonMat;
+            const edgeGeo = new THREE.BoxGeometry(0.15, 0.1, segmentLength);
+            const leftEdge = new THREE.Mesh(edgeGeo, edgeMat);
+            leftEdge.position.set(centerX - widthVar/2 + 0.1, -0.05, zPos);
+            leftEdge.castShadow = false;
+            const rightEdge = new THREE.Mesh(edgeGeo, edgeMat);
+            rightEdge.position.set(centerX + widthVar/2 - 0.1, -0.05, zPos);
+            rightEdge.castShadow = false;
+            trackGroup.add(leftEdge);
+            trackGroup.add(rightEdge);
+            
+            // Store boundary data
+            trackPoints.push({
+                z: zPos,
+                leftBound: centerX - trackWidth/2,
+                rightBound: centerX + trackWidth/2,
+                centerX: centerX
+            });
+        }
+        scene.add(trackGroup);
+        
+        // --- Decorative elements: neon arches & trees (VR atmosphere) ---
+        const archGroup = new THREE.Group();
+        for (let i = -15; i <= trackLength; i += 12) {
+            const tArch = (i + 20) * curveFrequency;
+            const archX = Math.sin(tArch) * curveAmplitude + Math.cos(tArch * 0.7) * 0.8;
+            const archHeight = 2.2;
+            const archColor = 0x33aaff;
+            const archMat = new THREE.MeshStandardMaterial({ color: archColor, emissive: 0x1177cc, emissiveIntensity: 0.4 });
+            const pillarGeo = new THREE.BoxGeometry(0.2, archHeight, 0.2);
+            const leftPillar = new THREE.Mesh(pillarGeo, archMat);
+            leftPillar.position.set(archX - 2.2, 0.8, i);
+            const rightPillar = new THREE.Mesh(pillarGeo, archMat);
+            rightPillar.position.set(archX + 2.2, 0.8, i);
+            const beamGeo = new THREE.BoxGeometry(4.4, 0.15, 0.3);
+            const beam = new THREE.Mesh(beamGeo, archMat);
+            beam.position.set(archX, 1.9, i);
+            archGroup.add(leftPillar, rightPillar, beam);
+        }
+        scene.add(archGroup);
+        
+        // Floating particles / speed lines
+        const particleCount = 800;
+        const particleGeometry = new THREE.BufferGeometry();
+        const particlePositions = new Float32Array(particleCount * 3);
+        for (let i = 0; i < particleCount; i++) {
+            particlePositions[i*3] = (Math.random() - 0.5) * 40;
+            particlePositions[i*3+1] = Math.random() * 4 - 1;
+            particlePositions[i*3+2] = (Math.random() - 0.5) * 150 - 30;
+        }
+        particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        const particleMat = new THREE.PointsMaterial({ color: 0x88aaff, size: 0.08, transparent: true, blending: THREE.AdditiveBlending });
+        const particles = new THREE.Points(particleGeometry, particleMat);
+        scene.add(particles);
+        
+        // --- Bike Model (custom sleek motorcycle using primitives) ---
+        const bikeGroup = new THREE.Group();
+        // Body
+        const bodyGeo = new THREE.BoxGeometry(0.6, 0.4, 1.2);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xdd3333, metalness: 0.85, roughness: 0.3 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.set(0, 0.2, 0);
+        body.castShadow = true;
+        bikeGroup.add(body);
+        // Windscreen
+        const screenGeo = new THREE.CylinderGeometry(0.25, 0.3, 0.3, 8);
+        const screenMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, emissive: 0x2266aa, emissiveIntensity: 0.3, transparent: true });
+        const screen = new THREE.Mesh(screenGeo, screenMat);
+        screen.position.set(0, 0.45, -0.4);
+        screen.castShadow = true;
+        bikeGroup.add(screen);
+        // Wheels
+        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.7, roughness: 0.4 });
+        const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 24);
+        const frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
+        frontWheel.rotation.z = Math.PI/2;
+        frontWheel.position.set(0, 0.05, 0.65);
+        frontWheel.castShadow = true;
+        const rearWheel = new THREE.Mesh(wheelGeo, wheelMat);
+        rearWheel.rotation.z = Math.PI/2;
+        rearWheel.position.set(0, 0.05, -0.55);
+        rearWheel.castShadow = true;
+        bikeGroup.add(frontWheel, rearWheel);
+        // Handlebar
+        const barGeo = new THREE.BoxGeometry(0.5, 0.1, 0.1);
+        const barMat = new THREE.MeshStandardMaterial({ color: 0xccccaa, metalness: 0.9 });
+        const handlebar = new THREE.Mesh(barGeo, barMat);
+        handlebar.position.set(0, 0.55, -0.2);
+        bikeGroup.add(handlebar);
+        // Neon glow strip on bike
+        const glowStrip = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.05, 0.9), new THREE.MeshStandardMaterial({ color: 0xff33aa, emissive: 0xff1188, emissiveIntensity: 0.7 }));
+        glowStrip.position.set(0, 0.32, 0);
+        bikeGroup.add(glowStrip);
+        
+        bikeGroup.castShadow = true;
+        bikeGroup.receiveShadow = false;
+        scene.add(bikeGroup);
+        
+        // --- Game state variables ---
+        let bikeX = 0;          // lateral position
+        let bikeZ = 0;          // forward distance traveled (actual world z)
+        let currentSpeed = 12.0; // units per second
+        const maxSpeed = 28;
+        const minSpeed = 8;
+        let score = 0;
+        let lastGateZ = -999;
+        let gameActive = true;
+        
+        // Steering sensitivity
+        let steerInput = 0;
+        let throttleInput = 0; // -1 brake/reverse, 1 accelerate
+        
+        // Keyboard handling
+        const keyState = {
+            ArrowLeft: false, ArrowRight: false,
+            ArrowUp: false, ArrowDown: false
+        };
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') keyState.ArrowLeft = true;
+            if (e.key === 'ArrowRight') keyState.ArrowRight = true;
+            if (e.key === 'ArrowUp') keyState.ArrowUp = true;
+            if (e.key === 'ArrowDown') keyState.ArrowDown = true;
+            if (e.key === 'r' || e.key === 'R') resetGame();
+            // prevent default scrolling
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft') keyState.ArrowLeft = false;
+            if (e.key === 'ArrowRight') keyState.ArrowRight = false;
+            if (e.key === 'ArrowUp') keyState.ArrowUp = false;
+            if (e.key === 'ArrowDown') keyState.ArrowDown = false;
+        });
+        
+        function resetGame() {
+            bikeX = 0;
+            bikeZ = 0;
+            currentSpeed = 12;
+            score = 0;
+            document.getElementById('scoreValue').innerText = "0";
+            gameActive = true;
+            // reset camera target smoothly
+            controls.target.set(0, 1.2, 0);
+            camera.position.set(0, 1.8, 3.5);
+            controls.update();
+        }
+        
+        // Helper to get track boundaries at given z
+        function getTrackBounds(zWorld) {
+            // clamp to track length
+            let clampedZ = Math.min(Math.max(zWorld, -20), trackLength - 20);
+            // find nearest segment
+            let idx = Math.floor((clampedZ + 20) / segmentLength);
+            idx = Math.min(Math.max(idx, 0), trackPoints.length-2);
+            const p1 = trackPoints[idx];
+            const p2 = trackPoints[idx+1];
+            const tFactor = ((clampedZ + 20) - idx * segmentLength) / segmentLength;
+            const left = p1.leftBound * (1-tFactor) + p2.leftBound * tFactor;
+            const right = p1.rightBound * (1-tFactor) + p2.rightBound * tFactor;
+            const center = p1.centerX * (1-tFactor) + p2.centerX * tFactor;
+            return { leftBound: left, rightBound: right, centerX: center };
+        }
+        
+        // Scoring: check if passed a virtual gate every 30 units, and if bike is near center bonus
+        let lastScoredZ = 0;
+        function updateScore(zPos) {
+            const gateInterval = 25;
+            const passed = Math.floor((zPos + 20) / gateInterval);
+            const lastPassed = Math.floor((lastScoredZ + 20) / gateInterval);
+            if (passed > lastPassed) {
+                // get accuracy based on how centered
+                const bounds = getTrackBounds(zPos);
+                const deviation = Math.abs(bikeX - bounds.centerX);
+                const maxDev = (bounds.rightBound - bounds.leftBound) / 2;
+                let accuracyBonus = Math.max(0, 1 - (deviation / maxDev));
+                let addScore = 100 + Math.floor(accuracyBonus * 50);
+                score += addScore;
+                document.getElementById('scoreValue').innerText = Math.floor(score);
+                // visual flash effect: create a temporary ring
+                const ringGeo = new THREE.RingGeometry(0.4, 0.8, 16);
+                const ringMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.position.set(bikeX, 0.5, zPos);
+                scene.add(ring);
+                setTimeout(() => scene.remove(ring), 300);
+            }
+            lastScoredZ = zPos;
+        }
+        
+        // Collision detection with track edges
+        function handleCollision() {
+            const bounds = getTrackBounds(bikeZ);
+            const halfWidth = (bounds.rightBound - bounds.leftBound) / 2;
+            const limitLeft = bounds.centerX - halfWidth;
+            const limitRight = bounds.centerX + halfWidth;
+            let clamped = bikeX;
+            let collided = false;
+            if (bikeX < limitLeft) { clamped = limitLeft; collided = true; }
+            if (bikeX > limitRight) { clamped = limitRight; collided = true; }
+            if (collided) {
+                bikeX = clamped;
+                currentSpeed = Math.max(minSpeed, currentSpeed * 0.92);
+                // visual feedback: screen flash? minor shake
+                document.body.style.backgroundColor = 'rgba(255,0,0,0.1)';
+                setTimeout(() => document.body.style.backgroundColor = '', 150);
+                score = Math.max(0, score - 15);
+                document.getElementById('scoreValue').innerText = Math.floor(score);
+            }
+            return collided;
+        }
+        
+        // --- Dynamic environment: rotating stars and moving particles ---
+        const starField = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xffffff, size: 0.1 }));
+        const starCount = 1200;
+        const starPos = [];
+        for (let i = 0; i < starCount; i++) {
+            starPos.push((Math.random() - 0.5) * 400);
+            starPos.push((Math.random() - 0.5) * 150 + 20);
+            starPos.push((Math.random() - 0.5) * 200 - 100);
+        }
+        starField.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starPos), 3));
+        starField.material.color.setHex(0xaaccff);
+        scene.add(starField);
+        
+        // --- Ground reflection / grid helper (optional)---
+        const gridHelper = new THREE.GridHelper(300, 40, 0x33aaff, 0x225588);
+        gridHelper.position.y = -0.8;
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.25;
+        scene.add(gridHelper);
+        
+        // Animate bike lean based on steering
+        let targetLean = 0;
+        let currentLean = 0;
+        
+        // --- Main Game Loop & Update ---
+        let lastTime = performance.now();
+        
+        function animate() {
+            const now = performance.now();
+            let delta = Math.min(0.033, (now - lastTime) / 1000);
+            lastTime = now;
+            if (delta <= 0) delta = 0.016;
+            
+            if (gameActive) {
+                // Process throttle
+                if (keyState.ArrowUp) throttleInput = 1;
+                else if (keyState.ArrowDown) throttleInput = -0.7;
+                else throttleInput = 0;
+                
+                if (throttleInput > 0) currentSpeed += 8 * delta;
+                else if (throttleInput < 0) currentSpeed -= 12 * delta;
+                else currentSpeed += (currentSpeed < maxSpeed*0.7 ? 1.5 : 0) * delta;
+                currentSpeed = Math.min(maxSpeed, Math.max(minSpeed, currentSpeed));
+                
+                // Steering
+                let steer = 0;
+                if (keyState.ArrowLeft) steer = -1;
+                if (keyState.ArrowRight) steer = 1;
+                const steerFactor = 7.5 * (currentSpeed / maxSpeed) * delta;
+                bikeX += steer * steerFactor;
+                // Natural centering force when no input
+                if (steer === 0) bikeX *= 0.98;
+                
+                // Move bike forward
+                bikeZ += currentSpeed * delta;
+                
+                // Boundaries & scoring
+                handleCollision();
+                updateScore(bikeZ);
+                
+                // Loop track: if bikeZ exceeds track length, reset to beginning (endless)
+                if (bikeZ > trackLength - 15) {
+                    bikeZ = -20;
+                    score += 500;
+                    document.getElementById('scoreValue').innerText = Math.floor(score);
+                    // optional camera reset
+                }
+                
+                // Calculate target lean angle (max 0.5 rad)
+                targetLean = steer * 0.45;
+                currentLean += (targetLean - currentLean) * 0.2;
+                bikeGroup.rotation.z = currentLean;
+                
+                // Update bike position
+                bikeGroup.position.set(bikeX, 0.05, bikeZ);
+                // Rotate bike slightly forward based on speed (visual)
+                bikeGroup.rotation.x = Math.sin(Date.now() * 0.02) * 0.03 + (currentSpeed / maxSpeed) * 0.1;
+                
+                // Dynamic camera: orbit target follows bike with slight lag
+                const targetCamX = bikeX * 0.4;
+                controls.target.lerp(new THREE.Vector3(targetCamX, 1.2, bikeZ), 0.08);
+                // camera relative position to maintain immersive follow
+                const idealCamOffset = new THREE.Vector3(targetCamX * 0.3, 1.9, bikeZ - 2.5);
+                camera.position.lerp(idealCamOffset, 0.1);
+                controls.update();
+                
+                // Update bike light to follow
+                bikeLight.position.set(bikeX, 0.6, bikeZ);
+                // Adjust intensity based on speed
+                bikeLight.intensity = 0.7 + (currentSpeed / maxSpeed) * 0.9;
+                
+                // Particle system: move particles backward to simulate speed
+                const positions = particles.geometry.attributes.position.array;
+                for (let i = 0; i < particleCount; i++) {
+                    let pz = positions[i*3+2];
+                    pz -= currentSpeed * delta * 1.2;
+                    if (pz < -25) {
+                        pz = 35;
+                        positions[i*3] = (Math.random() - 0.5) * 30 + bikeX * 0.8;
+                        positions[i*3+1] = Math.random() * 3 - 0.5;
+                    }
+                    positions[i*3+2] = pz;
+                }
+                particles.geometry.attributes.position.needsUpdate = true;
+                
+                // Rotate starfield slowly
+                starField.rotation.y += 0.001;
+                starField.rotation.x += 0.0005;
+                
+                // Additional neon effect: flicker track lights
+                const time = Date.now() * 0.008;
+                neonMat.emissiveIntensity = 0.5 + Math.sin(time) * 0.2;
+                neonMatRed.emissiveIntensity = 0.4 + Math.cos(time * 1.3) * 0.25;
+            }
+            
+            // Render via effect composer for bloom
+            effectComposer.render();
+            requestAnimationFrame(animate);
+        }
+        
+        // Start the race
+        resetGame();
+        animate();
+        
+        // Handle window resize
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            effectComposer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Simple instruction hint in console
+        console.log('🏁 VR Bike Racing started! Use arrow keys to ride, R to restart. Enjoy the neon track!');
+    </script>
+</body>
 </html>
